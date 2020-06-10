@@ -47,8 +47,12 @@ defmodule Ueberauth.Strategy.Procore do
     token = apply(module, :get_token!, [[code: code, redirect_uri: redirect_uri(conn)]])
 
     if token.access_token == nil do
-      Helpers.set_errors!(conn, [error(token.other_params["error"],
-                                 token.other_params["error_description"])])
+      Helpers.set_errors!(conn, [
+        error(
+          token.other_params["error"],
+          token.other_params["error_description"]
+        )
+      ])
     else
       fetch_user(conn, token)
     end
@@ -113,7 +117,7 @@ defmodule Ueberauth.Strategy.Procore do
   callback.
   """
   def extra(conn) do
-    %Extra {
+    %Extra{
       raw_info: %{
         token: conn.private.procore_token,
         user: conn.private.procore_user
@@ -123,20 +127,20 @@ defmodule Ueberauth.Strategy.Procore do
 
   defp fetch_user(conn, token) do
     conn = put_private(conn, :procore_token, token)
-    with {:ok, companies}    <- get_companies(token),
+
+    with {:ok, companies} <- get_companies(token),
          [%{"id" => id} | _] = companies,
-         {:ok, user}         <- get_me(token, id)
-    do
+         {:ok, user} <- get_me(token, id) do
       put_private(conn, :procore_user, user)
     else
-      {:error, :unauthorized}                 -> set_errors!(conn, [error("token", "unauthorized")])
+      {:error, :unauthorized} -> set_errors!(conn, [error("token", "unauthorized")])
       {:error, %OAuth2.Error{reason: reason}} -> set_errors!(conn, [error("OAuth2", reason)])
-      {:error, reason}                        -> set_errors!(conn, [error("OAuth2", reason)])
+      {:error, reason} -> set_errors!(conn, [error("OAuth2", reason)])
     end
   end
 
   defp option(conn, key) do
-    Dict.get(Helpers.options(conn), key, Dict.get(default_options, key))
+    Keyword.get(Helpers.options(conn), key, Keyword.get(default_options(), key))
   end
 
   defp redirect_uri(conn) do
@@ -144,17 +148,17 @@ defmodule Ueberauth.Strategy.Procore do
   end
 
   defp get_companies(token) do
-    case OAuth2.AccessToken.get(token, "/vapid/companies") do
+    case Ueberauth.Strategy.Procore.OAuth.get(token, "/vapid/companies") do
       {:ok, %OAuth2.Response{status_code: 200, body: companies}} -> {:ok, companies}
-      {:ok, %OAuth2.Response{status_code: 401, body: _body}}     -> {:error, :unauthorized}
-      other                                                      -> {:error, other}
+      {:ok, %OAuth2.Response{status_code: 401, body: _body}} -> {:error, :unauthorized}
+      other -> {:error, other}
     end
   end
 
   defp get_me(token, id) do
-    case OAuth2.AccessToken.get(token, "/vapid/companies/#{id}/me") do
+    case Ueberauth.Strategy.Procore.OAuth.get(token, "/vapid/companies/#{id}/me") do
       {:ok, %OAuth2.Response{status_code: 200, body: me}} -> {:ok, me}
-      other                                               -> {:error, :no_user}
+      _other -> {:error, :no_user}
     end
   end
 end

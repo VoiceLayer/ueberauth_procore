@@ -14,7 +14,7 @@ defmodule Ueberauth.Strategy.Procore.OAuth do
     strategy: __MODULE__,
     site: "https://app.procore.com",
     authorize_url: "https://app.procore.com/oauth/authorize",
-    token_url: "https://app.procore.com/oauth/token",
+    token_url: "https://app.procore.com/oauth/token"
   ]
 
   @doc """
@@ -28,10 +28,14 @@ defmodule Ueberauth.Strategy.Procore.OAuth do
   These options are only useful for usage outside the normal callback phase of Ueberauth.
   """
   def client(opts \\ []) do
-    opts = Keyword.merge(@defaults, Application.get_env(:ueberauth, Ueberauth.Strategy.Procore.OAuth))
-    |> Keyword.merge(opts)
+    opts =
+      Keyword.merge(@defaults, Application.get_env(:ueberauth, Ueberauth.Strategy.Procore.OAuth))
+      |> Keyword.merge(opts)
+
+    json_library = Ueberauth.json_library()
 
     OAuth2.Client.new(opts)
+    |> OAuth2.Client.put_serializer("application/json", json_library)
   end
 
   @doc """
@@ -42,11 +46,19 @@ defmodule Ueberauth.Strategy.Procore.OAuth do
     |> OAuth2.Client.authorize_url!(params)
   end
 
+  def get(token, url, headers \\ [], opts \\ []) do
+    [token: token]
+    |> client
+    |> put_param("client_secret", client().client_secret)
+    |> OAuth2.Client.get(url, headers, opts)
+  end
+
   def get_token!(params \\ [], options \\ %{}) do
-    headers = Dict.get(options, :headers, [])
-    options = Dict.get(options, :options, [])
-    client_options = Dict.get(options, :client_options, [])
-    OAuth2.Client.get_token!(client(client_options), params, headers, options)
+    headers = Map.get(options, :headers, [])
+    options = Map.get(options, :options, [])
+    client_options = Keyword.get(options, :client_options, [])
+    client = OAuth2.Client.get_token!(client(client_options), params, headers, options)
+    client.token
   end
 
   # Strategy Callbacks
@@ -57,6 +69,7 @@ defmodule Ueberauth.Strategy.Procore.OAuth do
 
   def get_token(client, params, headers) do
     client
+    |> put_param("client_secret", client.client_secret)
     |> put_header("Accept", "application/json")
     |> OAuth2.Strategy.AuthCode.get_token(params, headers)
   end
